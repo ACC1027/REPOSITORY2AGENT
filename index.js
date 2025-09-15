@@ -1,21 +1,24 @@
 import express from "express";
 import fetch from "node-fetch";
+import { GoogleAuth } from "google-auth-library";
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
 const DATA_AGENT = process.env.DATA_AGENT;
-const PROJECT_ID = process.env.PROJECT_ID;
-const LOCATION = process.env.LOCATION;
+
+const auth = new GoogleAuth({
+  scopes: "https://www.googleapis.com/auth/cloud-platform",
+});
 
 app.post("/ask", async (req, res) => {
   try {
     const { question } = req.body;
 
-    // Pide un token a gcloud (Cloud Run tiene permisos por defecto)
-    const { execSync } = await import("child_process");
-    const ACCESS_TOKEN = execSync("gcloud auth application-default print-access-token").toString().trim();
+    // Obtiene un token válido desde las credenciales por defecto en Cloud Run
+    const client = await auth.getClient();
+    const ACCESS_TOKEN = await client.getAccessToken();
 
     // Llamada a la API de Gemini Data Analytics
     const response = await fetch(
@@ -27,7 +30,7 @@ app.post("/ask", async (req, res) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          textInput: { text: question, languageCode: "es-ES" }
+          textInput: { text: question, languageCode: "es-ES" },
         }),
       }
     );
@@ -35,9 +38,14 @@ app.post("/ask", async (req, res) => {
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    console.error(err);
+    console.error("Error en /ask:", err);
     res.status(500).send("Error al procesar la pregunta");
   }
+});
+
+// Ruta raíz para pruebas rápidas
+app.get("/", (req, res) => {
+  res.send("✅ Agente activo y escuchando en /ask");
 });
 
 app.listen(PORT, () => {
